@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IoT Botnet Detection · แผน G</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true"></div>
+    <div>
+      <h1>IoT Botnet Detection</h1>
+      <p class="sub">แผน G · Random Forest + XGBoost + Autoencoder · ชุดข้อมูล N-BaIoT</p>
+    </div>
+  </div>
+  <div class="status" id="status"><span class="dot"></span><span id="status-text">กำลังเชื่อมต่อ…</span></div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" class="tab active" data-tab="overview">ภาพรวมผลโมเดล</button>
+  <button role="tab" class="tab" data-tab="detect">ทดสอบตรวจจับ</button>
+  <button role="tab" class="tab" data-tab="upload">อัปโหลด CSV</button>
+  <button role="tab" class="tab" data-tab="api">API</button>
+</nav>
+
+<main>
+  <div id="banner" class="banner" hidden></div>
+
+  <!-- ========== ภาพรวม ========== -->
+  <section id="tab-overview" class="tab-panel">
+    <div id="overview-empty" class="empty" hidden></div>
+    <div id="overview-body" hidden>
+      <div class="kpis" id="kpis"></div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>ผลบนชุด Test</h2>
+          <p class="hint">วัดครั้งเดียวหลังเลือกน้ำหนัก/threshold บนชุด calibration · <b><u>ตัวหนา+ขีดเส้นใต้</u></b> = ดีที่สุดของคอลัมน์ · FN = การโจมตีที่พลาด · FP = แจ้งเตือนผิด</p>
+        </div>
+        <div class="table-wrap"><table id="results-table" class="data"></table></div>
+      </div>
+
+      <div class="grid-3">
+        <div class="card"><div class="card-head"><h3>การโจมตีที่พลาด (FN)</h3><p class="hint">ยิ่งต่ำยิ่งดี · ซ้ายเส้นประ = โมเดลเดี่ยว</p></div><div id="chart-fn" class="chart"></div></div>
+        <div class="card"><div class="card-head"><h3>แจ้งเตือนผิด (FP)</h3><p class="hint">ยิ่งต่ำยิ่งดี</p></div><div id="chart-fp" class="chart"></div></div>
+        <div class="card"><div class="card-head"><h3>F1-score</h3><p class="hint">ซูมแกน y เพราะค่าใกล้ 1 มาก</p></div><div id="chart-f1" class="chart"></div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h3>ROC curve</h3><p class="hint">แกน FPR เป็น log เพื่อดูช่วงแจ้งเตือนผิดต่ำ ๆ</p></div>
+          <div id="chart-roc" class="chart tall"></div>
+          <div id="legend-roc" class="legend"></div>
+        </div>
+        <div class="card">
+          <div class="card-head row">
+            <div><h3>การกระจายคะแนนหลังปรับสเกล</h3><p class="hint">สองสีแยกกันชัด = แยกปกติ/โจมตีได้ดี · เส้นประ = threshold</p></div>
+            <select id="hist-method" class="select-sm" aria-label="เลือกโมเดล"></select>
+          </div>
+          <div id="chart-hist" class="chart tall"></div>
+          <div class="legend"><span class="key"><i style="background:var(--s-benign)"></i>ปกติ (benign)</span><span class="key"><i style="background:var(--s-attack)"></i>โจมตี (attack)</span></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head row">
+            <div><h3>Confusion matrix</h3><p class="hint">แถว = ของจริง · คอลัมน์ = ที่ทำนาย</p></div>
+            <select id="cm-method" class="select-sm" aria-label="เลือกโมเดล"></select>
+          </div>
+          <div id="cm" class="cm"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>ตัวรวมผลเลือกอะไร</h3><p class="hint">น้ำหนัก Weighted, สัมประสิทธิ์ Stacking และ threshold (เลือกบนชุด calibration)</p></div>
+          <div id="fusion-info"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>ensemble ช่วยจริงไหม? (เทียบโมเดลเดี่ยวที่ดีที่สุด)</h3><p class="hint">แก้ได้ = โมเดลเดี่ยวผิดแต่ ensemble ถูก · ทำพัง = กลับกัน · Δ ติดลบ = ดีขึ้น</p></div>
+        <div class="table-wrap"><table id="gain-table" class="data"></table></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>ผลแยกตามชนิดการโจมตี</h3><p class="hint">แถว benign = สัดส่วนที่แจ้งเตือนผิด (FPR) · แถวอื่น = สัดส่วนที่จับได้ (Recall) · สีเข้มขึ้น = จับได้มากขึ้น (ช่วง 90–100%)</p></div>
+        <div class="table-wrap"><table id="attack-table" class="data heat"></table></div>
+      </div>
+
+      <div id="unseen-block" hidden>
+        <div class="grid-2">
+          <div class="card"><div class="card-head"><h3 id="unseen-title">Recall ต่อการโจมตีที่ไม่เคยเห็น</h3><p class="hint">ซ่อนการโจมตีตระกูลนี้ตอนฝึก แล้วดูว่าแต่ละวิธีจับได้แค่ไหน</p></div><div id="chart-unseen-recall" class="chart"></div></div>
+          <div class="card"><div class="card-head"><h3>อัตราแจ้งเตือนผิดในการทดลองเดียวกัน</h3><p class="hint">ดูคู่กัน — recall สูงแต่แจ้งเตือนผิดเยอะก็ใช้จริงไม่ได้</p></div><div id="chart-unseen-fpr" class="chart"></div></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><h3>ข้อมูลที่สุ่มมาใช้ แยกตามชนิดทราฟฟิก</h3><p class="hint" id="data-hint"></p></div><div id="chart-data" class="chart auto"></div></div>
+        <div class="card"><div class="card-head"><h3>Loss ของ Autoencoder</h3><p class="hint">ฝึกด้วยข้อมูลปกติอย่างเดียว · เส้นประ = validation</p></div><div id="chart-ae" class="chart"></div>
+          <div class="legend"><span class="key"><i style="background:var(--s-ae)"></i>train</span><span class="key"><i class="dash" style="border-color:var(--s-ae)"></i>validation</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== ทดสอบตรวจจับ ========== -->
+  <section id="tab-detect" class="tab-panel" hidden>
+    <div class="card controls">
+      <div class="field">
+        <label>แหล่งข้อมูล</label>
+        <div class="seg" id="src-seg">
+          <button class="active" data-src="demo">ชุดทดสอบ (ไม่เคยใช้ฝึก)</button>
+          <button data-src="file">ไฟล์ในโฟลเดอร์ข้อมูล</button>
+        </div>
+      </div>
+      <div class="field"><label for="dev-select">อุปกรณ์</label><select id="dev-select"></select></div>
+      <div class="field"><label for="att-select">ชนิดทราฟฟิก</label><select id="att-select"></select></div>
+      <div class="field small"><label for="n-input">จำนวนแถว</label><input id="n-input" type="number" min="1" max="20000" value="300"></div>
+      <div class="field"><label for="method-select">วิธีตัดสิน</label><select id="method-select"></select></div>
+      <div class="field btn-field"><button id="run-btn" class="btn primary">ตรวจจับ</button></div>
+    </div>
+    <p class="hint pad" id="src-hint"></p>
+    <div id="detect-result"></div>
+  </section>
+
+  <!-- ========== อัปโหลด ========== -->
+  <section id="tab-upload" class="tab-panel" hidden>
+    <div class="card controls">
+      <div class="field grow">
+        <label for="file-input">ไฟล์ CSV (115 features แบบ N-BaIoT เช่น benign_traffic.csv)</label>
+        <label class="drop" id="drop">
+          <input id="file-input" type="file" accept=".csv,text/csv">
+          <span id="drop-text">ลากไฟล์มาวาง หรือคลิกเพื่อเลือก</span>
+        </label>
+      </div>
+      <div class="field"><label for="truth-select">ประเภทจริงของไฟล์</label>
+        <select id="truth-select">
+          <option value="auto">เดาจากชื่อไฟล์ / คอลัมน์ label</option>
+          <option value="unknown">ไม่ทราบ</option>
+          <option value="benign">ปกติทั้งหมด</option>
+          <option value="attack">โจมตีทั้งหมด</option>
+        </select></div>
+      <div class="field"><label for="up-method-select">วิธีตัดสิน</label><select id="up-method-select"></select></div>
+      <div class="field btn-field"><button id="up-btn" class="btn primary" disabled>ตรวจไฟล์</button></div>
+    </div>
+    <div id="upload-result"></div>
+  </section>
+
+  <!-- ========== API ========== -->
+  <section id="tab-api" class="tab-panel" hidden>
+    <div class="card prose">
+      <h2>เรียกใช้จากโปรแกรมอื่น</h2>
+      <p>เอกสาร API แบบกดทดลองได้อยู่ที่ <a href="/docs" target="_blank">/docs</a></p>
+      <table class="data api">
+        <thead><tr><th>Method</th><th>Path</th><th>ใช้ทำอะไร</th></tr></thead>
+        <tbody>
+          <tr><td>GET</td><td><code>/api/status</code></td><td>สถานะโมเดล threshold และน้ำหนัก</td></tr>
+          <tr><td>GET</td><td><code>/api/metrics</code></td><td>ผลวัดบนชุด test และข้อมูลกราฟทั้งหมด</td></tr>
+          <tr><td>GET</td><td><code>/api/catalog</code></td><td>รายชื่ออุปกรณ์และชนิดทราฟฟิกในโฟลเดอร์ข้อมูล</td></tr>
+          <tr><td>GET</td><td><code>/api/score/demo?device=1&amp;attack=mirai.syn&amp;n=200</code></td><td>สุ่มจากชุด test แล้วตรวจ</td></tr>
+          <tr><td>GET</td><td><code>/api/score/file?file_id=1:benign&amp;n=500</code></td><td>อ่านไฟล์ในโฟลเดอร์ข้อมูลแล้วตรวจ</td></tr>
+          <tr><td>POST</td><td><code>/api/score/upload</code></td><td>อัปโหลด CSV (form field <code>file</code>)</td></tr>
+          <tr><td>POST</td><td><code>/api/predict</code></td><td>ส่ง JSON <code>{"rows": [{...115 features...}], "method": "Weighted"}</code></td></tr>
+          <tr><td>POST</td><td><code>/api/reload</code></td><td>โหลดโมเดลใหม่หลังรัน train.py (ไม่ต้องรีสตาร์ตเซิร์ฟเวอร์)</td></tr>
+        </tbody>
+      </table>
+      <h3>ตัวอย่าง</h3>
+      <pre><code>curl -F "file=@Danmini_Doorbell/benign_traffic.csv" http://127.0.0.1:8000/api/score/upload</code></pre>
+      <h3>ระดับแจ้งเตือน</h3>
+      <ul>
+        <li><b>แจ้งเตือน</b> — วิธีตัดสินที่เลือกบอกว่าโจมตี และโมเดลเดี่ยวเห็นด้วยอย่างน้อย 2 ใน 3</li>
+        <li><b>เฝ้าระวัง</b> — ความเห็นไม่ตรงกัน: ตัวรวมผลบอกโจมตีแต่โมเดลเดี่ยวเห็นด้วยไม่ถึง 2 ตัว หรือตัวรวมผลบอกปกติแต่มีโมเดลเดี่ยวเตือน</li>
+        <li><b>ปกติ</b> — ไม่มีโมเดลไหนเตือน</li>
+        <li><b>AE เท่านั้น</b> — Autoencoder เตือนแต่ RF/XGB ไม่เตือน อาจเป็นรูปแบบการโจมตีที่ไม่เคยเห็นตอนฝึก</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<div id="tooltip" class="tooltip" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

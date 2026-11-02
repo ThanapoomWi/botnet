@@ -1,0 +1,6 @@
+artifacts/
+.venv/
+__pycache__/
+*.pyc
+data/*
+!data/README.txt
